@@ -1,0 +1,69 @@
+# BCSO Training Operations Center
+
+A static website for coordinating training across BCSO divisions. It uses Supabase Auth + Postgres for accounts, permissions, division records, training events, and server-side overlap prevention. The calendar is powered by FullCalendar.
+
+## Included
+- Email/password sign-in and account creation
+- Shared calendar across divisions
+- Create, edit, cancel, and review training sessions
+- Automatic database-level overlap prevention across all divisions
+- Division schedulers, commanders, co-commanders, and system administrators
+- Admin tools to add divisions and grant division access by email
+- Dashboard and completed/cancelled history
+- Responsive layout for desktop and mobile
+
+## 1. Create and configure Supabase
+1. Create a project at https://supabase.com.
+2. Open **SQL Editor → New query**.
+3. Paste all of `supabase/schema.sql` and run it.
+4. Open **Project Settings → API** and copy the Project URL and anon/publishable key.
+5. Copy `config.js.example` to `config.js` and fill in those two values.
+6. In Supabase **Authentication → URL Configuration**, add your deployed site URL to Site URL and Redirect URLs. For local testing, add `http://localhost:8000/**`.
+7. For a private role-play department, consider requiring email confirmation and only distributing the site to authorized personnel.
+
+Do not put a Supabase `service_role` key in `config.js` or any browser code. The anon/publishable key is safe for browser use only because Row Level Security policies protect the database.
+
+## 2. Create your first administrator
+1. Register your own account through the website.
+2. Confirm the email if Supabase requires it.
+3. Sign in once so the profile trigger creates your profile.
+4. In Supabase SQL Editor, run (replace the email):
+   ```sql
+   update public.profiles
+   set role = 'admin'
+   where email = 'your-email@example.com';
+   ```
+5. Sign out and back in. You should now see **Division Management**.
+
+## 3. Add personnel and division access
+1. Ask each division scheduler/commander to create an account.
+2. As an administrator, open **Division Management**.
+3. Use **Division access** to enter the exact email they registered with, choose their division and access level, and grant access.
+4. A scheduler can create training for that division. Division commanders and co-commanders can also edit/cancel that division's training. System admins can manage all divisions.
+
+All signed-in personnel can view the shared calendar. Only authorized division members can create training.
+
+## 4. Run locally
+The website is plain HTML/CSS/JS; no build step is required. From this folder run:
+```bash
+python -m http.server 8000
+```
+Then open `http://localhost:8000`. Make sure `config.js` exists first.
+
+## 5. Deploy to GitHub Pages
+1. Create a GitHub repository and upload the contents of this folder (including `config.js`).
+2. In repository **Settings → Pages**, select **Deploy from a branch**, choose `main` and `/ (root)`.
+3. Save and wait for the Pages URL to publish.
+4. Add that URL to Supabase Authentication's allowed redirect URLs.
+5. If you use a public repository, remember that `config.js` contains the public anon/publishable key, not a secret. Security depends on correct RLS policies. Never commit a service-role key.
+
+## Scheduling conflict behavior
+The database rejects a new or updated scheduled training if its time overlaps another scheduled training, regardless of division. Back-to-back sessions are allowed (one ends exactly when the next begins). Cancelled/completed sessions do not block new sessions. The database serializes booking writes to reduce race conditions.
+
+A system administrator can approve an exception after reviewing it by setting `conflict_override=true` on that training in Supabase SQL Editor. The normal website does not expose this control to schedulers. An overridden event is excluded from conflict blocking; subsequent events can overlap it.
+
+## Important operational notes
+- All times are stored as `timestamptz` and displayed in each viewer's local browser time zone.
+- This starter version does not send Discord announcements, reminders, or email notifications. Those can be added later using a Supabase Edge Function and a Discord webhook stored as a server-side secret.
+- This is a starter implementation. Test it with a few test accounts and divisions before relying on it for official department scheduling.
+- If you already have a Supabase project with existing tables/policies, back it up and review the SQL before running. The script is designed for a new project.
