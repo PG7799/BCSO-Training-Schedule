@@ -4,6 +4,14 @@
 --   2. supabase/training-command-overrides.sql
 -- This migration does not alter existing training records.
 
+-- Ensure the training table has all approval-audit fields required below.
+-- These are additive and safe to run on an existing database.
+alter table public.trainings
+  add column if not exists conflict_override boolean not null default false,
+  add column if not exists conflict_approved_by uuid references auth.users(id),
+  add column if not exists conflict_approved_at timestamptz;
+
+
 create table if not exists public.training_overlap_requests (
   id uuid primary key default gen_random_uuid(),
   division_id uuid not null references public.divisions(id),
