@@ -29,7 +29,7 @@
     <main class="main">
       <header class="topbar">
         <div><p class="eyebrow">BLAINE COUNTY SHERIFF'S OFFICE</p><h1 id="pageTitle">Dashboard</h1></div>
-        <div class="top-actions"><span class="status-pill"><i></i> Scheduling system online</span><button class="button primary" id="quickSchedule">＋ New training</button></div>
+        <div class="top-actions"><span class="status-pill"><i></i> Scheduling system online</span><button class="button secondary" id="commandAccessButton">Command access</button><span id="commandBadge" class="command-badge hidden">Training Command</span><button class="button primary" id="quickSchedule">＋ New training</button></div>
       </header>
 
       <section id="dashboardPage" class="page">
@@ -71,7 +71,7 @@
               </div>
               <div class="conflict-note"><strong>Automatic conflict checking</strong><span>The system checks every active division training before saving. A conflict must be resolved or explicitly overridden by command staff.</span></div>
               <p id="trainingMessage" class="form-message" role="status"></p>
-              <div class="button-row"><button type="button" class="button secondary" id="cancelEdit">Clear</button><button class="button primary" type="submit" id="saveTraining">Save training</button></div>
+              <div class="button-row"><button type="button" class="button secondary hidden" id="overrideSave">Approve overlap &amp; save</button><button type="button" class="button secondary" id="cancelEdit">Clear</button><button class="button primary" type="submit" id="saveTraining">Save training</button></div>
             </form>
           </div>
           <aside class="side-info"><h3>Scheduling guidelines</h3><ul><li>Check the department calendar before selecting a time.</li><li>Include a clear title and instructor.</li><li>Allow time for personnel to travel and prepare.</li><li>Contact your division command staff if a scheduled event needs to be changed or cancelled.</li></ul><div class="info-box"><strong>Need an exception?</strong><p>Only command staff can approve a scheduling conflict override. Contact command before proceeding.</p></div></aside>
@@ -89,6 +89,21 @@
 
   <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-card"><button class="modal-close" id="closeModal" aria-label="Close">×</button><p class="eyebrow" id="modalDivision"></p><h2 id="modalTitle"></h2><p id="modalWhen" class="muted"></p><div id="modalDescription" class="modal-description"></div><div class="detail-grid" id="modalDetails"></div><div id="modalActions" class="button-row"></div></div>
+  </div>
+
+  <div id="commandAuthModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="commandAuthTitle">
+    <div class="modal-card command-auth-card">
+      <button class="modal-close" id="closeCommandAuth" aria-label="Close">×</button>
+      <p class="eyebrow">RESTRICTED ACCESS</p>
+      <h2 id="commandAuthTitle">Training Command</h2>
+      <p class="muted command-auth-copy">Sign in with your authorized Training Command account. Public scheduling remains available without signing in.</p>
+      <form id="commandAuthForm" class="command-auth-form">
+        <label>Email<input id="commandEmail" type="email" autocomplete="username" required></label>
+        <label>Password<input id="commandPassword" type="password" autocomplete="current-password" required></label>
+        <p id="commandAuthMessage" class="form-message" role="status"></p>
+        <div class="button-row"><button type="button" class="button secondary" id="commandSignOut">Sign out</button><button type="submit" class="button primary" id="commandSignIn">Sign in</button></div>
+      </form>
+    </div>
   </div>
 
   <script src="config.js"></script>
