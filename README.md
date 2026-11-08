@@ -7,6 +7,7 @@ A static website for coordinating training across BCSO divisions. It uses Supaba
 - Shared calendar across divisions
 - Create, edit, cancel, and review training sessions
 - Automatic database-level overlap prevention across all divisions
+- A Training Command-only queue for reviewing, approving, and denying overlap requests
 - Division schedulers, commanders, co-commanders, and system administrators
 - Admin tools to add divisions and grant division access by email
 - Dashboard and completed/cancelled history
@@ -58,9 +59,21 @@ Then open `http://localhost:8000`. Make sure `config.js` exists first.
 5. If you use a public repository, remember that `config.js` contains the public anon/publishable key, not a secret. Security depends on correct RLS policies. Never commit a service-role key.
 
 ## Scheduling conflict behavior
-The database rejects a new or updated scheduled training if its time overlaps another scheduled training, regardless of division. Back-to-back sessions are allowed (one ends exactly when the next begins). Cancelled/completed sessions do not block new sessions. The database serializes booking writes to reduce race conditions.
 
-A system administrator can approve an exception after reviewing it by setting `conflict_override=true` on that training in Supabase SQL Editor. The normal website does not expose this control to schedulers. An overridden event is excluded from conflict blocking; subsequent events can overlap it.
+The database rejects a training that overlaps another scheduled training. Back-to-back sessions are allowed, and completed/cancelled sessions do not block new sessions. When a conflict is detected, the form automatically submits the full proposed session to the Training Command review queue rather than adding it to the calendar.
+
+Only accounts on the private Training Command allowlist can see the **Overlap Requests** tab. Command members can review the requester, division, instructor, dates and times, location, participant limit, full description, and the scheduled sessions currently in conflict. They can approve and schedule the request or deny it with an optional review note. Approval rechecks the schedule inside the database and records the reviewer and whether an overlap exception was actually required. Requesters receive a request reference and a one-time cancellation code; the code is stored as a hash and transferred to the resulting training only if approved.
+
+### Install the overlap approval queue
+
+After the existing scheduling/cancellation setup and the Training Command allowlist setup, run `supabase/training-overlap-approval-queue.sql` in Supabase SQL Editor. The expected order is:
+
+1. `supabase/schema.sql`
+2. `supabase/public-cancellation-migration.sql`
+3. `supabase/training-command-overrides.sql`
+4. `supabase/training-overlap-approval-queue.sql`
+
+Add each authorized command account to `training_command_members` using the SQL example in `training-command-overrides.sql`. The new tab appears only after an account signs in and passes the `is_training_command()` check. Do not grant ordinary schedulers access to the allowlist table or the review RPCs.
 
 ## Important operational notes
 - All times are stored as `timestamptz` and displayed in each viewer's local browser time zone.
