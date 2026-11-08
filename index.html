@@ -11,24 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 </head>
 <body>
-  <div id="loginView" class="login-shell">
-    <div class="login-card">
-      <div class="brand-mark">BCSO</div>
-      <p class="eyebrow">BLAINE COUNTY SHERIFF'S OFFICE</p>
-      <h1>Training Operations Center</h1>
-      <p class="muted">Department-wide training coordination and scheduling.</p>
-      <form id="authForm">
-        <label>Email<input id="email" type="email" autocomplete="username" required></label>
-        <label>Password<input id="password" type="password" autocomplete="current-password" required minlength="6"></label>
-        <button class="button primary full" id="authSubmit" type="submit">Sign in</button>
-      </form>
-      <button class="text-button" id="showSignup" type="button">Create an account</button>
-      <p id="authMessage" class="form-message" role="status"></p>
-      <p class="tiny muted">Access is limited to authorized department personnel.</p>
-    </div>
-  </div>
 
-  <div id="appView" class="app-shell hidden">
+  <div id="appView" class="app-shell">
     <aside class="sidebar">
       <div class="side-brand"><div class="brand-mark small">BCSO</div><div><strong>Training Ops</strong><span>Command Portal</span></div></div>
       <nav>
@@ -36,11 +20,9 @@
         <button class="nav-item" data-page="calendar">▦ <span>Training Calendar</span></button>
         <button class="nav-item" data-page="schedule">＋ <span>Schedule Training</span></button>
         <button class="nav-item" data-page="history">◷ <span>Training History</span></button>
-        <button class="nav-item admin-only hidden" data-page="management">⚙ <span>Division Management</span></button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="user-chip"><div class="avatar" id="userInitials">BC</div><div><strong id="userName">User</strong><span id="userRole">Personnel</span></div></div>
-        <button id="signOut" class="signout">Sign out ↗</button>
+        <div class="user-chip"><div class="avatar">BC</div><div><strong>Public Access</strong><span>Division scheduling</span></div></div>
       </div>
     </aside>
 
@@ -71,9 +53,8 @@
       <section id="schedulePage" class="page hidden">
         <div class="form-layout">
           <div class="form-card">
-            <div class="section-heading"><div><h2 id="scheduleHeading">Schedule a training</h2><p class="muted">Submit a session for the department calendar.</p></div></div>
+            <div class="section-heading"><div><h2 id="scheduleHeading">Schedule a training</h2><p class="muted">Anyone can submit a session for their division. No account required.</p></div></div>
             <form id="trainingForm" class="training-form">
-              <input type="hidden" id="trainingId">
               <label>Training title<input id="title" maxlength="120" required placeholder="e.g. Advanced Traffic Stop Procedures"></label>
               <div class="form-grid">
                 <label>Division<select id="division" required></select></label>
@@ -93,7 +74,7 @@
               <div class="button-row"><button type="button" class="button secondary" id="cancelEdit">Clear</button><button class="button primary" type="submit" id="saveTraining">Save training</button></div>
             </form>
           </div>
-          <aside class="side-info"><h3>Scheduling guidelines</h3><ul><li>Check the department calendar before selecting a time.</li><li>Include a clear title and instructor.</li><li>Allow time for personnel to travel and prepare.</li><li>Update or cancel the event if plans change.</li></ul><div class="info-box"><strong>Need an exception?</strong><p>Only command staff can approve a scheduling conflict override. Contact command before proceeding.</p></div></aside>
+          <aside class="side-info"><h3>Scheduling guidelines</h3><ul><li>Check the department calendar before selecting a time.</li><li>Include a clear title and instructor.</li><li>Allow time for personnel to travel and prepare.</li><li>Contact your division command staff if a scheduled event needs to be changed or cancelled.</li></ul><div class="info-box"><strong>Need an exception?</strong><p>Only command staff can approve a scheduling conflict override. Contact command before proceeding.</p></div></aside>
         </div>
       </section>
 
@@ -102,19 +83,7 @@
         <div id="historyList" class="training-list"></div>
       </section>
 
-      <section id="managementPage" class="page hidden">
-        <div class="management-grid">
-          <div class="form-card"><h2>Add a division</h2><p class="muted">Create a division that can schedule training.</p>
-            <form id="divisionForm"><label>Division name<input id="divisionName" required maxlength="80"></label><label>Short description<input id="divisionDescription" maxlength="250"></label><button class="button primary" type="submit">Add division</button><p id="divisionMessage" class="form-message"></p></form>
-          </div>
-          <div class="form-card"><h2>Division access</h2><p class="muted">Grant scheduling permissions to a user's account.</p>
-            <form id="memberForm"><label>User email<input id="memberEmail" type="email" required></label><label>Division<select id="memberDivision" required></select></label><label>Access level<select id="memberRole"><option value="scheduler">Training scheduler</option><option value="commander">Division commander</option><option value="co_commander">Co-commander</option></select></label><button class="button primary" type="submit">Grant access</button><p id="memberMessage" class="form-message"></p></form>
-          </div>
-        </div>
-        <div class="form-card"><h2>Current divisions</h2><div id="divisionList" class="division-list"></div></div>
-        <div class="form-card"><h2>Command access</h2><p class="muted">To make an account a system administrator, update its profile in the Supabase SQL Editor. See the setup guide.</p><code>update public.profiles set role = 'admin' where email = 'your@email.com';</code></div>
-      </section>
-      <footer>BCSO Training Operations Center <span>•</span> Internal department tool</footer>
+      <footer>BCSO Training Operations Center <span>•</span> Public division scheduling portal</footer>
     </main>
   </div>
 
