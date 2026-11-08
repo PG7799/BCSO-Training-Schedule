@@ -20,6 +20,7 @@
         <button class="nav-item" data-page="calendar">▦ <span>Training Calendar</span></button>
         <button class="nav-item" data-page="schedule">＋ <span>Schedule Training</span></button>
         <button class="nav-item" data-page="history">◷ <span>Training History</span></button>
+        <button class="nav-item hidden" id="overlapRequestsNav" data-page="overlapRequests">⚑ <span>Overlap Requests</span><span class="queue-count" id="overlapPendingCount">0</span></button>
       </nav>
       <div class="sidebar-bottom">
         <div class="user-chip"><div class="avatar">BC</div><div><strong>Public Access</strong><span>Division scheduling</span></div></div>
@@ -53,13 +54,14 @@
       <section id="schedulePage" class="page hidden">
         <div class="form-layout">
           <div class="form-card">
-            <div class="section-heading"><div><h2 id="scheduleHeading">Schedule a training</h2><p class="muted">Anyone can submit a session for their division. No account required.</p></div></div>
+            <div class="section-heading"><div><h2 id="scheduleHeading">Schedule a training</h2><p class="muted">Anyone can submit a session for their division. Overlapping sessions are sent to Training Command for review.</p></div></div>
             <form id="trainingForm" class="training-form">
               <label>Training title<input id="title" maxlength="120" required placeholder="e.g. Advanced Traffic Stop Procedures"></label>
               <div class="form-grid">
                 <label>Division<select id="division" required></select></label>
                 <label>Instructor<input id="instructor" maxlength="100" required placeholder="Name / callsign"></label>
               </div>
+              <label>Submitted by (name / callsign)<input id="requesterName" maxlength="100" placeholder="Optional — helps command identify the requester"></label>
               <label>Description<textarea id="description" rows="4" maxlength="2000" placeholder="Training objectives, equipment, prerequisites..."></textarea></label>
               <div class="form-grid">
                 <label>Start date and time<input id="startsAt" type="datetime-local" required></label>
@@ -69,13 +71,30 @@
                 <label>Location<input id="location" maxlength="150" placeholder="In-game location"></label>
                 <label>Maximum participants<input id="capacity" type="number" min="1" max="500" placeholder="No limit"></label>
               </div>
-              <div class="conflict-note"><strong>Automatic conflict checking</strong><span>The system checks every active division training before saving. A conflict must be resolved or explicitly overridden by command staff.</span></div>
+              <div class="conflict-note"><strong>Automatic conflict checking</strong><span>The system checks every scheduled training. If the requested time overlaps another session, it is sent to the Training Command approval queue instead of being scheduled automatically.</span></div>
               <p id="trainingMessage" class="form-message" role="status"></p>
-              <div class="button-row"><button type="button" class="button secondary hidden" id="overrideSave">Approve overlap &amp; save</button><button type="button" class="button secondary" id="cancelEdit">Clear</button><button class="button primary" type="submit" id="saveTraining">Save training</button></div>
+              <div class="button-row"><button type="button" class="button secondary" id="cancelEdit">Clear</button><button class="button primary" type="submit" id="saveTraining">Save training</button></div>
             </form>
           </div>
-          <aside class="side-info"><h3>Scheduling guidelines</h3><ul><li>Check the department calendar before selecting a time.</li><li>Include a clear title and instructor.</li><li>Allow time for personnel to travel and prepare.</li><li>Contact Training Command Staff if cancellation code is forgotten or lost.</li></ul><div class="info-box"><strong>Need an exception?</strong><p>Only command staff can approve a scheduling conflict override. Contact command before proceeding.</p></div></aside>
+          <aside class="side-info"><h3>Scheduling guidelines</h3><ul><li>Check the department calendar before selecting a time.</li><li>Include a clear title and instructor.</li><li>Allow time for personnel to travel and prepare.</li><li>Contact Training Command Staff if cancellation code is forgotten or lost.</li></ul><div class="info-box"><strong>Need an exception?</strong><p>Overlapping sessions are submitted for review. Authorized Training Command members can approve or deny them from the restricted Overlap Requests tab.</p></div></aside>
         </div>
+      </section>
+
+      <section id="overlapRequestsPage" class="page hidden">
+        <div class="section-heading">
+          <div><h2>Overlap approval queue</h2><p class="muted">Review the complete request and the trainings it conflicts with before deciding.</p></div>
+          <div class="queue-controls">
+            <select id="overlapStatusFilter" class="compact-select" aria-label="Filter overlap requests">
+              <option value="pending">Pending review</option>
+              <option value="all">All requests</option>
+              <option value="approved">Approved</option>
+              <option value="denied">Denied</option>
+            </select>
+            <button class="button secondary" id="refreshOverlapRequests" type="button">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="queue-summary" id="overlapQueueSummary"></div>
+        <div id="overlapRequestsList" class="overlap-request-list"><div class="empty-state">Loading overlap requests...</div></div>
       </section>
 
       <section id="historyPage" class="page hidden">
