@@ -93,7 +93,8 @@
     bindTrainingCards();
   }
   function overlapsRequest(training,request){
-    return training.status==="scheduled"
+    return training.id!==request.approved_training_id
+      && training.status==="scheduled"
       && new Date(training.starts_at)<new Date(request.ends_at)
       && new Date(training.ends_at)>new Date(request.starts_at);
   }
