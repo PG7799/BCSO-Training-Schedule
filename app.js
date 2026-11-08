@@ -1,7 +1,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const config = window.BCSO_CONFIG || {};
-  let db, divisions = [], trainings = [], calendar, activeFilter = "";
+  let db, divisions = [], trainings = [], calendar, activeFilter = "", isTrainingCommand = false, pendingTrainingPayload = null;
   const colors = ["#477ce6","#23956b","#8a63c7","#d28b35","#c65d75","#268eaa","#75839a"];
   const colorFor = (id) => colors[Math.max(0, divisions.findIndex(d => d.id === id)) % colors.length];
   const esc = (s="") => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -14,15 +14,23 @@
       alert("Setup required: copy config.js.example to config.js and add your Supabase Project URL and Publishable key.");
       return;
     }
-    db = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    db = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
     $("quickSchedule").addEventListener("click", () => navigate("schedule"));
     $("cancelEdit").addEventListener("click", clearTrainingForm);
     $("trainingForm").addEventListener("submit", saveTraining);
+    $("trainingForm").addEventListener("input", () => { pendingTrainingPayload=null; $("overrideSave").classList.add("hidden"); });
+    $("overrideSave").addEventListener("click", () => submitTraining(true));
+    $("commandAccessButton").addEventListener("click", openCommandAuth);
+    $("closeCommandAuth").addEventListener("click", closeCommandAuth);
+    $("commandAuthModal").addEventListener("click", e => { if(e.target === $("commandAuthModal")) closeCommandAuth(); });
+    $("commandAuthForm").addEventListener("submit", commandSignIn);
+    $("commandSignOut").addEventListener("click", commandSignOut);
     $("historyDivision").addEventListener("change", renderHistory);
     $("closeModal").addEventListener("click", closeModal);
     $("eventModal").addEventListener("click", e => { if(e.target === $("eventModal")) closeModal(); });
     document.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click",()=>navigate(b.dataset.page)));
     document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.goto)));
+    await checkCommandSession();
     await refreshData();
     navigate("dashboard");
   }
@@ -87,7 +95,9 @@
     $("modalTitle").textContent=t.title;
     $("modalWhen").textContent=`${dateFmt(t.starts_at,{weekday:"long",year:"numeric"})} – ${dateFmt(t.ends_at)}`;
     $("modalDescription").textContent=t.description||"No additional description provided.";
-    $("modalDetails").innerHTML=[["Instructor",t.instructor],["Location",t.location||"Not specified"],["Capacity",t.capacity||"No limit"],["Status",t.status]].map(([k,v])=>`<div class="detail-cell"><span>${k}</span><strong>${esc(v)}</strong></div>`).join("");
+    const detailRows=[["Instructor",t.instructor],["Location",t.location||"Not specified"],["Capacity",t.capacity||"No limit"],["Status",t.status]];
+    if(t.conflict_override) detailRows.push(["Scheduling exception","Approved by Training Command"]);
+    $("modalDetails").innerHTML=detailRows.map(([k,v])=>`<div class="detail-cell"><span>${k}</span><strong>${esc(v)}</strong></div>`).join("");
     $("modalActions").innerHTML = t.status === "scheduled"
       ? '<button class="button danger" id="cancelScheduledTraining">Cancel this training</button>'
       : '';
@@ -119,15 +129,50 @@
   }
   function clearTrainingForm(){
     $("trainingForm").reset();$("scheduleHeading").textContent="Schedule a training";$("saveTraining").textContent="Save training";msg("trainingMessage","");
+    $("overrideSave").classList.add("hidden"); pendingTrainingPayload=null;
   }
-  async function saveTraining(e){
-    e.preventDefault();
+  function openCommandAuth(){ $("commandAuthModal").classList.remove("hidden"); msg("commandAuthMessage", isTrainingCommand ? "You are signed in with Training Command access." : ""); }
+  function closeCommandAuth(){ $("commandAuthModal").classList.add("hidden"); }
+  async function checkCommandSession(){
+    const {data:{session}}=await db.auth.getSession();
+    if(!session){setCommandState(false);return;}
+    const {data,error}=await db.rpc("is_training_command");
+    if(error || data!==true){ await db.auth.signOut(); setCommandState(false); return; }
+    setCommandState(true);
+  }
+  function setCommandState(active){
+    isTrainingCommand=active;
+    $("commandBadge").classList.toggle("hidden",!active);
+    $("commandAccessButton").textContent=active?"Command signed in":"Command access";
+    $("commandSignOut").classList.toggle("hidden",!active);
+    $("commandSignIn").classList.toggle("hidden",active);
+    $("commandEmail").disabled=active; $("commandPassword").disabled=active;
+    if(!active) $("commandAuthForm").reset();
+  }
+  async function commandSignIn(e){
+    e.preventDefault(); msg("commandAuthMessage","Verifying Training Command access...");
+    const {error}=await db.auth.signInWithPassword({email:$("commandEmail").value.trim(),password:$("commandPassword").value});
+    if(error){msg("commandAuthMessage",error.message);return;}
+    const {data, error:roleError}=await db.rpc("is_training_command");
+    if(roleError || data!==true){ await db.auth.signOut(); setCommandState(false); msg("commandAuthMessage","This account is not authorized for Training Command overrides."); return; }
+    setCommandState(true); msg("commandAuthMessage","Training Command access verified.",true);
+    setTimeout(closeCommandAuth,700);
+  }
+  async function commandSignOut(){ await db.auth.signOut(); setCommandState(false); msg("commandAuthMessage","Signed out.",true); }
+  function getTrainingPayload(){
     const starts=new Date($("startsAt").value), ends=new Date($("endsAt").value);
-    if(!(starts<ends)){msg("trainingMessage","The end time must be later than the start time.");return}
-    if(starts<new Date()){msg("trainingMessage","Choose a future start time.");return}
-    const payload={title:$("title").value.trim(),division_id:$("division").value,instructor:$("instructor").value.trim(),description:$("description").value.trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),location:$("location").value.trim()||null,capacity:$("capacity").value?Number($("capacity").value):null};
-    msg("trainingMessage","Checking schedule and saving...");
-    const result=await db.rpc("create_training_with_cancel_code", {
+    if(!(starts<ends)){msg("trainingMessage","The end time must be later than the start time.");return null;}
+    if(starts<new Date()){msg("trainingMessage","Choose a future start time.");return null;}
+    return {title:$("title").value.trim(),division_id:$("division").value,instructor:$("instructor").value.trim(),description:$("description").value.trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),location:$("location").value.trim()||null,capacity:$("capacity").value?Number($("capacity").value):null};
+  }
+  async function submitTraining(useOverride=false){
+    const payload=pendingTrainingPayload || getTrainingPayload();
+    if(!payload)return;
+    if(useOverride && !isTrainingCommand){msg("trainingMessage","Training Command sign-in is required to approve an overlap.");return;}
+    msg("trainingMessage",useOverride?"Verifying command approval and saving overlap...":"Checking schedule and saving...");
+    $("saveTraining").disabled=true; $("overrideSave").disabled=true;
+    const rpcName=useOverride?"create_training_with_cancel_code_override":"create_training_with_cancel_code";
+    const result=await db.rpc(rpcName, {
       training_title: payload.title,
       target_division_id: payload.division_id,
       training_instructor: payload.instructor,
@@ -137,16 +182,21 @@
       training_location: payload.location,
       training_capacity: payload.capacity
     });
+    $("saveTraining").disabled=false; $("overrideSave").disabled=false;
     if(result.error){
-      const text=result.error.message.toLowerCase().includes("training_conflict")||result.error.message.toLowerCase().includes("overlap")
-        ?"This time overlaps another scheduled division training. Choose another time or ask command staff for an approved override."
-        :result.error.message;
-      msg("trainingMessage",text);return;
+      const conflict=result.error.message.toLowerCase().includes("training_conflict")||result.error.message.toLowerCase().includes("overlap");
+      const text=conflict
+        ? (isTrainingCommand ? "This session overlaps another scheduled training. As Training Command, you may approve this cross-division overlap." : "This time overlaps another scheduled division training. Choose another time or ask Training Command for approval.")
+        : result.error.message;
+      msg("trainingMessage",text);
+      if(conflict && isTrainingCommand){pendingTrainingPayload=payload;$("overrideSave").classList.remove("hidden");}
+      return;
     }
-    const created = Array.isArray(result.data) ? result.data[0] : result.data;
-    if (!created?.cancellation_code) { msg("trainingMessage","Training was saved, but the cancellation code could not be displayed. Contact command staff before closing this page."); return; }
-    alert(`Training saved successfully!\n\nCancellation code: ${created.cancellation_code}\n\nSave this code. It is required to cancel this training later. It will not be shown again.`);
+    const created=Array.isArray(result.data)?result.data[0]:result.data;
+    if(!created?.cancellation_code){msg("trainingMessage","Training was saved, but the cancellation code could not be displayed. Contact Training Command before closing this page.");return;}
+    alert(`Training saved successfully${useOverride?" with Training Command overlap approval":""}!\n\nCancellation code: ${created.cancellation_code}\n\nSave this code. It is required to cancel this training later. It will not be shown again.`);
     clearTrainingForm();await refreshData();navigate("calendar");
   }
+  async function saveTraining(e){ e.preventDefault(); pendingTrainingPayload=getTrainingPayload(); if(!pendingTrainingPayload)return; await submitTraining(false); }
   init();
 })();
