@@ -189,6 +189,24 @@ begin
       using errcode = '42501';
   end if;
 
+  -- The trainings.created_by column references public.profiles(id).
+  -- Repair a missing profile for this authenticated command user before
+  -- creating the approved training. New profiles receive the safe default
+  -- role of 'personnel'; Training Command permissions remain in the
+  -- separate private training_command_members allowlist.
+  insert into public.profiles (id, email, full_name)
+  select u.id, lower(u.email),
+         coalesce(u.raw_user_meta_data ->> 'full_name', '')
+  from auth.users u
+  where u.id = auth.uid()
+  on conflict do nothing;
+
+  if not exists (
+    select 1 from public.profiles p where p.id = auth.uid()
+  ) then
+    raise exception 'Your Training Command account is missing its BCSO profile. Run the command-profile repair SQL and try again.';
+  end if;
+
   perform pg_advisory_xact_lock(71924501);
 
   select * into request_row
