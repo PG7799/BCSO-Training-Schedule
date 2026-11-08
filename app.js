@@ -1,13 +1,13 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const config = window.BCSO_CONFIG || {};
-  let db, divisions = [], trainings = [], calendar, activeFilter = "", isTrainingCommand = false, pendingTrainingPayload = null;
+  let db, divisions = [], trainings = [], overlapRequests = [], calendar, activeFilter = "", isTrainingCommand = false;
   const colors = ["#477ce6","#23956b","#8a63c7","#d28b35","#c65d75","#268eaa","#75839a"];
   const colorFor = (id) => colors[Math.max(0, divisions.findIndex(d => d.id === id)) % colors.length];
   const esc = (s="") => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const dateFmt = (d, opts={}) => new Date(d).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit",...opts});
   const msg = (id, text, good=false) => { $(id).textContent=text; $(id).className="form-message"+(good?" success":""); };
-  const pageNames = {dashboard:"Dashboard",calendar:"Training Calendar",schedule:"Schedule Training",history:"Training History"};
+  const pageNames = {dashboard:"Dashboard",calendar:"Training Calendar",schedule:"Schedule Training",history:"Training History",overlapRequests:"Overlap Requests"};
 
   async function init() {
     if (!config.SUPABASE_URL || !config.SUPABASE_ANON_KEY || config.SUPABASE_URL.includes("YOUR-PROJECT")) {
@@ -18,8 +18,8 @@
     $("quickSchedule").addEventListener("click", () => navigate("schedule"));
     $("cancelEdit").addEventListener("click", clearTrainingForm);
     $("trainingForm").addEventListener("submit", saveTraining);
-    $("trainingForm").addEventListener("input", () => { pendingTrainingPayload=null; $("overrideSave").classList.add("hidden"); });
-    $("overrideSave").addEventListener("click", () => submitTraining(true));
+    $("overlapStatusFilter").addEventListener("change", renderOverlapQueue);
+    $("refreshOverlapRequests").addEventListener("click", refreshOverlapRequests);
     $("commandAccessButton").addEventListener("click", openCommandAuth);
     $("closeCommandAuth").addEventListener("click", closeCommandAuth);
     $("commandAuthModal").addEventListener("click", e => { if(e.target === $("commandAuthModal")) closeCommandAuth(); });
@@ -42,6 +42,7 @@
     if(d.error || t.error){alert("Unable to load schedule data: "+(d.error||t.error).message);return;}
     divisions=d.data||[]; trainings=t.data||[];
     populateDivisionSelects(); renderDashboard(); renderHistory(); renderCalendar();
+    if(isTrainingCommand) await refreshOverlapRequests();
   }
   function populateDivisionSelects(){
     const opts=divisions.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join("");
@@ -49,11 +50,13 @@
     $("historyDivision").innerHTML='<option value="">All divisions</option>'+opts;
   }
   function navigate(page){
+    if(page==="overlapRequests" && !isTrainingCommand) page="dashboard";
     document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));
     $(page+"Page").classList.remove("hidden");
     document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
     $("pageTitle").textContent=pageNames[page];
     if(page==="calendar"&&calendar) setTimeout(()=>calendar.updateSize(),30);
+    if(page==="overlapRequests") refreshOverlapRequests();
   }
   function renderDashboard(){
     const now=new Date(), month=now.getMonth(), year=now.getFullYear();
@@ -88,6 +91,131 @@
     const rows=trainings.filter(t=>["completed","cancelled"].includes(t.status)&&(!div||t.division_id===div)).sort((a,b)=>new Date(b.starts_at)-new Date(a.starts_at));
     $("historyList").innerHTML=rows.map(t=>`<article class="training-item" data-id="${t.id}"><div class="event-stripe" style="background:${t.status==="completed"?"#23956b":"#9aa4b3"}"></div><div><span class="tag">${esc(t.divisions?.name||"Division")} · ${esc(t.status)}</span><h3>${esc(t.title)}</h3><p>${esc(t.instructor)} · ${dateFmt(t.starts_at)}</p></div><div class="event-time">${t.status==="completed"?"Completed":"Cancelled"}</div></article>`).join("")||empty("No completed or cancelled trainings found.");
     bindTrainingCards();
+  }
+  function overlapsRequest(training,request){
+    return training.status==="scheduled"
+      && new Date(training.starts_at)<new Date(request.ends_at)
+      && new Date(training.ends_at)>new Date(request.starts_at);
+  }
+  async function refreshOverlapRequests(){
+    if(!isTrainingCommand)return;
+    $("overlapRequestsList").innerHTML='<div class="empty-state">Loading requests...</div>';
+    const {data,error}=await db.from("training_overlap_requests")
+      .select("*, divisions(name)")
+      .order("created_at",{ascending:false});
+    if(error){
+      $("overlapQueueSummary").innerHTML="";
+      $("overlapRequestsList").innerHTML=empty("Unable to load the command queue: "+error.message);
+      return;
+    }
+    overlapRequests=data||[];
+    const pending=overlapRequests.filter(r=>r.status==="pending").length;
+    $("overlapPendingCount").textContent=String(pending);
+    renderOverlapQueue();
+  }
+  function renderOverlapQueue(){
+    if(!isTrainingCommand)return;
+    const filter=$("overlapStatusFilter").value||"pending";
+    const pending=overlapRequests.filter(r=>r.status==="pending").length;
+    const approved=overlapRequests.filter(r=>r.status==="approved").length;
+    const denied=overlapRequests.filter(r=>r.status==="denied").length;
+    $("overlapQueueSummary").innerHTML=
+      '<div class="queue-stat"><strong>'+pending+'</strong>Awaiting review</div>'+
+      '<div class="queue-stat"><strong>'+approved+'</strong>Approved</div>'+
+      '<div class="queue-stat"><strong>'+denied+'</strong>Denied</div>';
+    const rows=overlapRequests.filter(r=>filter==="all"||r.status===filter);
+    if(!rows.length){
+      $("overlapRequestsList").innerHTML=empty(filter==="pending"?"There are no overlap requests awaiting review.":"No requests match this filter.");
+      return;
+    }
+    $("overlapRequestsList").innerHTML=rows.map(request=>{
+      const division=request.divisions?.name||divisions.find(d=>d.id===request.division_id)?.name||"Division";
+      const conflicts=trainings.filter(t=>overlapsRequest(t,request));
+      const status=request.status||"pending";
+      const conflictMarkup=conflicts.length
+        ? conflicts.map(t=>{
+            const name=t.divisions?.name||divisions.find(d=>d.id===t.division_id)?.name||"Division";
+            return '<div class="request-conflict"><strong>'+esc(t.title)+'</strong> — '+esc(name)+'<br>'+
+              'Instructor: '+esc(t.instructor||"Not listed")+' · '+esc(dateFmt(t.starts_at,{weekday:"short",year:"numeric"}))+
+              ' to '+esc(dateFmt(t.ends_at))+'<br>Location: '+esc(t.location||"Not specified")+
+              (t.conflict_override?' · Previously approved overlap':'')+'</div>';
+          }).join("")
+        : '<div class="request-conflict">No currently scheduled trainings overlap this request. If approved now, it will be added without an overlap exception.</div>';
+      const review=request.reviewed_at
+        ? '<div class="request-review-meta">Reviewed '+esc(dateFmt(request.reviewed_at,{year:"numeric"}))+' by '+esc(request.reviewed_by_label||"Training Command")+
+          (request.approved_training_id?' · Training record '+esc(request.approved_training_id):'')+'</div>'
+        : '';
+      const note=request.review_note?'<div class="request-review-note"><strong>Command note:</strong> '+esc(request.review_note)+'</div>':'';
+      const actions=status==="pending"
+        ? '<div class="request-actions"><button class="button danger" data-deny-request="'+esc(request.id)+'">Deny request</button><button class="button primary" data-approve-request="'+esc(request.id)+'">Approve &amp; schedule</button></div>'
+        : '';
+      return '<article class="overlap-request-card">'+
+        '<div class="overlap-request-head"><div><span class="tag">'+esc(division)+'</span><h3>'+esc(request.title)+'</h3><p>Submitted '+esc(dateFmt(request.created_at,{weekday:"short",year:"numeric"}))+'</p></div><span class="request-status '+esc(status)+'">'+esc(status)+'</span></div>'+
+        '<div class="request-detail-grid">'+
+          requestDetail("Submitted by",request.requester_name||"Not provided")+
+          requestDetail("Instructor",request.instructor)+
+          requestDetail("Division",division)+
+          requestDetail("Start",dateFmt(request.starts_at,{weekday:"long",year:"numeric"}))+
+          requestDetail("End",dateFmt(request.ends_at,{weekday:"long",year:"numeric"}))+
+          requestDetail("Location",request.location||"Not specified")+
+          requestDetail("Maximum participants",request.capacity||"No limit")+
+          requestDetail("Request submitted",dateFmt(request.created_at,{year:"numeric"}))+
+          requestDetail("Request status",status.toUpperCase())+
+        '</div>'+
+        '<div class="request-full-description"><strong>Full training description / objectives</strong><br>'+esc(request.description||"No description was provided.")+'</div>'+
+        '<div class="request-conflicts"><h4>Current scheduling conflicts ('+conflicts.length+')</h4>'+conflictMarkup+'</div>'+
+        review+note+
+        '<div class="request-id">Request reference: '+esc(request.id)+'</div>'+
+        actions+
+      '</article>';
+    }).join("");
+    $("overlapRequestsList").querySelectorAll("[data-approve-request]").forEach(button=>{
+      button.addEventListener("click",()=>approveOverlapRequest(button.dataset.approveRequest,button));
+    });
+    $("overlapRequestsList").querySelectorAll("[data-deny-request]").forEach(button=>{
+      button.addEventListener("click",()=>denyOverlapRequest(button.dataset.denyRequest,button));
+    });
+  }
+  function requestDetail(label,value){
+    return '<div class="request-detail"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong></div>';
+  }
+  async function approveOverlapRequest(id,button){
+    const request=overlapRequests.find(r=>r.id===id);
+    if(!request||request.status!=="pending")return;
+    const division=request.divisions?.name||divisions.find(d=>d.id===request.division_id)?.name||"Division";
+    const warning="Approve and schedule this training?\n\n"+request.title+"\n"+division+"\n"+dateFmt(request.starts_at,{weekday:"long",year:"numeric"})+" to "+dateFmt(request.ends_at)+"\n\nThe system will recheck all conflicts before scheduling.";
+    if(!confirm(warning))return;
+    button.disabled=true;button.textContent="Approving...";
+    const {data,error}=await db.rpc("approve_training_overlap_request",{p_request_id:id});
+    if(error){
+      alert("Could not approve this request: "+error.message);
+      button.disabled=false;button.textContent="Approve & schedule";
+      return;
+    }
+    const result=Array.isArray(data)?data[0]:data;
+    alert(result?.conflict_overridden
+      ?"Request approved and scheduled. The overlap exception has been recorded."
+      :"Request approved and scheduled. The conflicting session is no longer active, so no overlap exception was needed.");
+    await refreshData();
+    await refreshOverlapRequests();
+  }
+  async function denyOverlapRequest(id,button){
+    const request=overlapRequests.find(r=>r.id===id);
+    if(!request||request.status!=="pending")return;
+    const reason=prompt("Optional reason for denying this request. This note will be visible in the command review history:");
+    if(reason===null)return;
+    button.disabled=true;button.textContent="Denying...";
+    const {error}=await db.rpc("deny_training_overlap_request",{
+      p_request_id:id,
+      p_review_note:reason.trim()||null
+    });
+    if(error){
+      alert("Could not deny this request: "+error.message);
+      button.disabled=false;button.textContent="Deny request";
+      return;
+    }
+    alert("Overlap request denied. It was not added to the training calendar.");
+    await refreshOverlapRequests();
   }
   function showEvent(id){
     const t=trainings.find(x=>x.id===id); if(!t)return;
@@ -129,7 +257,7 @@
   }
   function clearTrainingForm(){
     $("trainingForm").reset();$("scheduleHeading").textContent="Schedule a training";$("saveTraining").textContent="Save training";msg("trainingMessage","");
-    $("overrideSave").classList.add("hidden"); pendingTrainingPayload=null;
+    $("requesterName").value="";
   }
   function openCommandAuth(){ $("commandAuthModal").classList.remove("hidden"); msg("commandAuthMessage", isTrainingCommand ? "You are signed in with Training Command access." : ""); }
   function closeCommandAuth(){ $("commandAuthModal").classList.add("hidden"); }
@@ -143,6 +271,9 @@
   function setCommandState(active){
     isTrainingCommand=active;
     $("commandBadge").classList.toggle("hidden",!active);
+    $("overlapRequestsNav").classList.toggle("hidden",!active);
+    if(!active){ overlapRequests=[]; $("overlapPendingCount").textContent="0"; if(!$("overlapRequestsPage").classList.contains("hidden")) navigate("dashboard"); }
+    else refreshOverlapRequests();
     $("commandAccessButton").textContent=active?"Command signed in":"Command access";
     $("commandSignOut").classList.toggle("hidden",!active);
     $("commandSignIn").classList.toggle("hidden",active);
@@ -163,40 +294,71 @@
     const starts=new Date($("startsAt").value), ends=new Date($("endsAt").value);
     if(!(starts<ends)){msg("trainingMessage","The end time must be later than the start time.");return null;}
     if(starts<new Date()){msg("trainingMessage","Choose a future start time.");return null;}
-    return {title:$("title").value.trim(),division_id:$("division").value,instructor:$("instructor").value.trim(),description:$("description").value.trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),location:$("location").value.trim()||null,capacity:$("capacity").value?Number($("capacity").value):null};
+    return {title:$("title").value.trim(),division_id:$("division").value,instructor:$("instructor").value.trim(),requester_name:$("requesterName").value.trim()||null,description:$("description").value.trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),location:$("location").value.trim()||null,capacity:$("capacity").value?Number($("capacity").value):null};
   }
-  async function submitTraining(useOverride=false){
-    const payload=pendingTrainingPayload || getTrainingPayload();
+  async function submitTraining(){
+    const payload=getTrainingPayload();
     if(!payload)return;
-    if(useOverride && !isTrainingCommand){msg("trainingMessage","Training Command sign-in is required to approve an overlap.");return;}
-    msg("trainingMessage",useOverride?"Verifying command approval and saving overlap...":"Checking schedule and saving...");
-    $("saveTraining").disabled=true; $("overrideSave").disabled=true;
-    const rpcName=useOverride?"create_training_with_cancel_code_override":"create_training_with_cancel_code";
-    const result=await db.rpc(rpcName, {
-      training_title: payload.title,
-      target_division_id: payload.division_id,
-      training_instructor: payload.instructor,
-      training_description: payload.description || null,
-      training_starts_at: payload.starts_at,
-      training_ends_at: payload.ends_at,
-      training_location: payload.location,
-      training_capacity: payload.capacity
-    });
-    $("saveTraining").disabled=false; $("overrideSave").disabled=false;
-    if(result.error){
-      const conflict=result.error.message.toLowerCase().includes("training_conflict")||result.error.message.toLowerCase().includes("overlap");
-      const text=conflict
-        ? (isTrainingCommand ? "This session overlaps another scheduled training. As Training Command, you may approve this cross-division overlap." : "This time overlaps another scheduled division training. Choose another time or ask Training Command for approval.")
-        : result.error.message;
-      msg("trainingMessage",text);
-      if(conflict && isTrainingCommand){pendingTrainingPayload=payload;$("overrideSave").classList.remove("hidden");}
-      return;
+    msg("trainingMessage","Checking the department schedule...");
+    $("saveTraining").disabled=true;
+    try{
+      const args={
+        training_title:payload.title,
+        target_division_id:payload.division_id,
+        training_instructor:payload.instructor,
+        training_description:payload.description||null,
+        training_starts_at:payload.starts_at,
+        training_ends_at:payload.ends_at,
+        training_location:payload.location,
+        training_capacity:payload.capacity
+      };
+      const result=await db.rpc("create_training_with_cancel_code",args);
+      if(result.error){
+        const message=String(result.error.message||"");
+        const conflict=message.toLowerCase().includes("training_conflict")||message.toLowerCase().includes("overlap");
+        if(!conflict){msg("trainingMessage",message);return;}
+        msg("trainingMessage","A scheduling conflict was found. Sending the full request to Training Command...");
+        const requestResult=await db.rpc("submit_training_overlap_request",{
+          p_training_title:payload.title,
+          p_target_division_id:payload.division_id,
+          p_training_instructor:payload.instructor,
+          p_training_description:payload.description||null,
+          p_training_starts_at:payload.starts_at,
+          p_training_ends_at:payload.ends_at,
+          p_training_location:payload.location,
+          p_training_capacity:payload.capacity,
+          p_requester_name:payload.requester_name
+        });
+        if(requestResult.error){
+          msg("trainingMessage","An overlap was found, but the request could not be submitted: "+requestResult.error.message);
+          return;
+        }
+        const request=Array.isArray(requestResult.data)?requestResult.data[0]:requestResult.data;
+        if(!request?.request_id||!request?.cancellation_code){
+          msg("trainingMessage","The request may have been created, but its receipt could not be displayed. Contact Training Command and provide the title and requested time.");
+          return;
+        }
+        alert("Overlap request submitted to Training Command. It is not scheduled unless Command approves it.\n\nRequest reference: "+request.request_id+"\nCancellation code: "+request.cancellation_code+"\n\nSave this code privately. It will be needed if the session is approved and later cancelled.");
+        clearTrainingForm();
+        if(isTrainingCommand){await refreshOverlapRequests();navigate("overlapRequests");}
+        else navigate("calendar");
+        return;
+      }
+      const created=Array.isArray(result.data)?result.data[0]:result.data;
+      if(!created?.cancellation_code){
+        msg("trainingMessage","Training was saved, but the cancellation code could not be displayed. Contact Training Command before closing this page.");
+        return;
+      }
+      alert("Training scheduled successfully!\n\nCancellation code: "+created.cancellation_code+"\n\nSave this code. It is required to cancel this training later. It will not be shown again.");
+      clearTrainingForm();
+      await refreshData();
+      navigate("calendar");
+    }catch(error){
+      msg("trainingMessage","Unable to submit the training: "+(error?.message||String(error)));
+    }finally{
+      $("saveTraining").disabled=false;
     }
-    const created=Array.isArray(result.data)?result.data[0]:result.data;
-    if(!created?.cancellation_code){msg("trainingMessage","Training was saved, but the cancellation code could not be displayed. Contact Training Command before closing this page.");return;}
-    alert(`Training saved successfully${useOverride?" with Training Command overlap approval":""}!\n\nCancellation code: ${created.cancellation_code}\n\nSave this code. It is required to cancel this training later. It will not be shown again.`);
-    clearTrainingForm();await refreshData();navigate("calendar");
   }
-  async function saveTraining(e){ e.preventDefault(); pendingTrainingPayload=getTrainingPayload(); if(!pendingTrainingPayload)return; await submitTraining(false); }
+  async function saveTraining(e){e.preventDefault();await submitTraining();}
   init();
 })();
