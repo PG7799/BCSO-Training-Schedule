@@ -88,10 +88,35 @@
     $("modalWhen").textContent=`${dateFmt(t.starts_at,{weekday:"long",year:"numeric"})} – ${dateFmt(t.ends_at)}`;
     $("modalDescription").textContent=t.description||"No additional description provided.";
     $("modalDetails").innerHTML=[["Instructor",t.instructor],["Location",t.location||"Not specified"],["Capacity",t.capacity||"No limit"],["Status",t.status]].map(([k,v])=>`<div class="detail-cell"><span>${k}</span><strong>${esc(v)}</strong></div>`).join("");
-    $("modalActions").innerHTML="";
+    $("modalActions").innerHTML = t.status === "scheduled"
+      ? '<button class="button danger" id="cancelScheduledTraining">Cancel this training</button>'
+      : '';
+    const cancelButton = $("cancelScheduledTraining");
+    if (cancelButton) cancelButton.addEventListener("click", () => cancelScheduledTraining(t));
     $("eventModal").classList.remove("hidden");
   }
   function closeModal(){$("eventModal").classList.add("hidden")}
+  async function cancelScheduledTraining(training){
+    const code = prompt("Enter the cancellation code that was provided when this training was scheduled:");
+    if (code === null) return;
+    if (!code.trim()) { alert("A cancellation code is required."); return; }
+    const reason = prompt("Optional cancellation reason:") || "Cancelled by scheduler";
+    const button = $("cancelScheduledTraining");
+    if (button) { button.disabled = true; button.textContent = "Cancelling..."; }
+    const { data, error } = await db.rpc("cancel_training_with_code", {
+      target_training_id: training.id,
+      supplied_code: code.trim(),
+      cancellation_reason: reason.trim().slice(0, 500)
+    });
+    if (error || !data) {
+      alert(error?.message || "Unable to cancel this training. Check the cancellation code.");
+      if (button) { button.disabled = false; button.textContent = "Cancel this training"; }
+      return;
+    }
+    closeModal();
+    alert("Training cancelled successfully.");
+    await refreshData();
+  }
   function clearTrainingForm(){
     $("trainingForm").reset();$("scheduleHeading").textContent="Schedule a training";$("saveTraining").textContent="Save training";msg("trainingMessage","");
   }
@@ -102,14 +127,26 @@
     if(starts<new Date()){msg("trainingMessage","Choose a future start time.");return}
     const payload={title:$("title").value.trim(),division_id:$("division").value,instructor:$("instructor").value.trim(),description:$("description").value.trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),location:$("location").value.trim()||null,capacity:$("capacity").value?Number($("capacity").value):null};
     msg("trainingMessage","Checking schedule and saving...");
-    const result=await db.from("trainings").insert({...payload,status:"scheduled",conflict_override:false});
+    const result=await db.rpc("create_training_with_cancel_code", {
+      training_title: payload.title,
+      target_division_id: payload.division_id,
+      training_instructor: payload.instructor,
+      training_description: payload.description || null,
+      training_starts_at: payload.starts_at,
+      training_ends_at: payload.ends_at,
+      training_location: payload.location,
+      training_capacity: payload.capacity
+    });
     if(result.error){
       const text=result.error.message.toLowerCase().includes("training_conflict")||result.error.message.toLowerCase().includes("overlap")
         ?"This time overlaps another scheduled division training. Choose another time or ask command staff for an approved override."
         :result.error.message;
       msg("trainingMessage",text);return;
     }
-    msg("trainingMessage","Training saved successfully.",true);clearTrainingForm();await refreshData();navigate("calendar");
+    const created = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (!created?.cancellation_code) { msg("trainingMessage","Training was saved, but the cancellation code could not be displayed. Contact command staff before closing this page."); return; }
+    alert(`Training saved successfully!\n\nCancellation code: ${created.cancellation_code}\n\nSave this code. It is required to cancel this training later. It will not be shown again.`);
+    clearTrainingForm();await refreshData();navigate("calendar");
   }
   init();
 })();
