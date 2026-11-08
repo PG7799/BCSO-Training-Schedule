@@ -87,9 +87,9 @@ begin
     raise exception 'Instructor is required.';
   end if;
 
-  if p_requester_name is not null
-     and char_length(trim(p_requester_name)) > 100 then
-    raise exception 'Requester name must be 100 characters or fewer.';
+  if p_requester_name is null
+     or char_length(trim(p_requester_name)) not between 1 and 100 then
+    raise exception 'Your name or callsign is required (100 characters maximum).';
   end if;
 
   if p_training_starts_at is null
