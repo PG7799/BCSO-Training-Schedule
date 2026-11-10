@@ -89,3 +89,10 @@ A separate deputy-facing viewer is available at `/public/`. It reads the same Su
 Before the public page can display data, run `supabase/public-schedule-readonly.sql` in the Supabase SQL Editor. This grants the anonymous browser role **SELECT only** on active divisions and scheduled trainings; it does not grant write access or expose profiles, division memberships, overlap requests, or command records. The existing authenticated scheduler policies remain responsible for all writes.
 
 The viewer uses the existing public anon/publishable key from `config.js`. Never use a service-role key in browser code. Enable GitHub Pages for the repository (Settings → Pages → Deploy from branch → main → /(root)); the public viewer will then be at `https://pg7799.github.io/BCSO-Training-Schedule/public/` if that is the configured Pages URL.
+
+
+## Add the Dispatch division to an existing database
+
+Run `supabase/add-dispatch-division.sql` in the Supabase SQL Editor. The statement safely creates the Dispatch division or reactivates it if it already exists. Once it is active, the existing website automatically includes Dispatch in the schedule form, history filter, and calendar division filters because those options are loaded from the `divisions` table.
+
+For a brand-new database, Dispatch is also included in the starter division list in `supabase/schema.sql`.
