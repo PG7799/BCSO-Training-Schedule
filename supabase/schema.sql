@@ -230,7 +230,8 @@ insert into public.divisions(name,description) values
  ('TEU','Traffic Enforcement Unit'),
  ('SWAT','Special Weapons and Tactics'),
  ('VICE','Vice and narcotics investigations'),
- ('CIU','Criminal Investigations Unit')
+ ('CIU','Criminal Investigations Unit'),
+ ('Dispatch','Emergency communications and dispatch operations')
 on conflict(name) do nothing;
 
 -- AFTER creating your first account, promote it to system administrator:
