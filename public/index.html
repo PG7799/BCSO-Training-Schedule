@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101a2b">
+<meta name="description" content="Public, read-only BCSO training schedule.">
+<title>BCSO | Public Training Schedule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="public.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script defer src="public.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <img src="../fto-emblem.webp" alt="BCSO FTO emblem">
+    <div><div class="eyebrow">BLAINE COUNTY SHERIFF'S OFFICE</div><strong>Training Operations</strong><span>Public Schedule</span></div>
+  </div>
+  <div class="live"><i></i><span id="connection">Connecting to live schedule</span></div>
+</header>
+<main>
+  <section class="intro">
+    <div><p class="eyebrow">DEPUTY PLANNING PORTAL</p><h1>Training Schedule</h1><p class="sub">View upcoming division trainings and plan your month. This page is public and read-only; all scheduling changes must be made through the authorized Training Operations Center.</p></div>
+    <div class="month-nav"><button id="prev" aria-label="Previous month">‹</button><div><span class="eyebrow">SCHEDULE MONTH</span><strong id="monthLabel">Loading…</strong></div><button id="next" aria-label="Next month">›</button></div>
+  </section>
+  <section class="toolbar">
+    <div id="filters" class="filters"><button class="filter active" data-filter="all">All divisions</button></div>
+    <div class="tools"><label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search trainings"></label><button id="today" class="outline">Current month</button><button id="refresh" class="outline">↻ Refresh</button></div>
+  </section>
+  <section class="summary">
+    <div><span>Scheduled this month</span><strong id="monthCount">—</strong></div>
+    <div><span>Divisions represented</span><strong id="divisionCount">—</strong></div>
+    <div><span>Next scheduled session</span><strong id="nextSession">—</strong></div>
+  </section>
+  <section class="calendar-card">
+    <div class="weekdays"><span>Sunday</span><span>Monday</span><span>Tuesday</span><span>Wednesday</span><span>Thursday</span><span>Friday</span><span>Saturday</span></div>
+    <div id="calendar" class="calendar" aria-live="polite"><div class="loading">Loading schedule…</div></div>
+  </section>
+  <section class="list-section">
+    <div class="section-head"><div><p class="eyebrow">MONTH AT A GLANCE</p><h2>Scheduled Trainings</h2></div><span id="resultLabel" class="muted"></span></div>
+    <div id="eventList" class="event-list"><div class="loading">Loading trainings…</div></div>
+  </section>
+  <footer><span>BCSO Training Operations Center</span><span>Public viewing only · Schedule managed by authorized personnel</span><span id="updated">Waiting for schedule data</span></footer>
+</main>
+<div id="details" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+ <div class="detail-modal"><button id="closeDetails" class="close" aria-label="Close">×</button><p class="eyebrow" id="detailDivision">TRAINING DETAILS</p><h2 id="detailTitle"></h2><div id="detailWhen" class="when"></div><div id="detailInfo" class="detail-info"></div><p id="detailDescription" class="description"></p><div class="readonly-note">Read-only schedule · Contact the appropriate division scheduler for changes.</div></div>
+</div>
+</body></html>

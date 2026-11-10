@@ -80,3 +80,12 @@ Add each authorized command account to `training_command_members` using the SQL 
 - This starter version does not send Discord announcements, reminders, or email notifications. Those can be added later using a Supabase Edge Function and a Discord webhook stored as a server-side secret.
 - This is a starter implementation. Test it with a few test accounts and divisions before relying on it for official department scheduling.
 - If you already have a Supabase project with existing tables/policies, back it up and review the SQL before running. The script is designed for a new project.
+
+
+## Public read-only schedule
+
+A separate deputy-facing viewer is available at `/public/`. It reads the same Supabase `trainings` and `divisions` tables, refreshes when records change, and has no write controls or authentication flow.
+
+Before the public page can display data, run `supabase/public-schedule-readonly.sql` in the Supabase SQL Editor. This grants the anonymous browser role **SELECT only** on active divisions and scheduled trainings; it does not grant write access or expose profiles, division memberships, overlap requests, or command records. The existing authenticated scheduler policies remain responsible for all writes.
+
+The viewer uses the existing public anon/publishable key from `config.js`. Never use a service-role key in browser code. Enable GitHub Pages for the repository (Settings → Pages → Deploy from branch → main → /(root)); the public viewer will then be at `https://pg7799.github.io/BCSO-Training-Schedule/public/` if that is the configured Pages URL.
