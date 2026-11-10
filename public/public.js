@@ -59,7 +59,7 @@ function init(){
  $("refresh").addEventListener("click",load);$("search").addEventListener("input",render);
  $("closeDetails").addEventListener("click",()=>$("details").classList.add("hidden"));
  $("details").addEventListener("click",e=>{if(e.target===$("details"))$("details").classList.add("hidden");});
- load();setupRealtime();
+ load();setupRealtime();window.setInterval(load,60000);
 }
 document.addEventListener("DOMContentLoaded",init);
 })();
