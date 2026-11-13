@@ -96,3 +96,10 @@ The viewer uses the existing public anon/publishable key from `config.js`. Never
 Run `supabase/add-dispatch-division.sql` in the Supabase SQL Editor. The statement safely creates the Dispatch division or reactivates it if it already exists. Once it is active, the existing website automatically includes Dispatch in the schedule form, history filter, and calendar division filters because those options are loaded from the `divisions` table.
 
 For a brand-new database, Dispatch is also included in the starter division list in `supabase/schema.sql`.
+
+
+## Add the K9 division to an existing database
+
+Run `supabase/add-k9-division.sql` in the Supabase SQL Editor. It safely creates the K9 division or reactivates it if it already exists. The primary and public schedule pages load active divisions directly from Supabase, so K9 will automatically appear in the training dropdown and division filters after the database change.
+
+For a brand-new database, K9 is also included in the starter division list in `supabase/schema.sql`.
