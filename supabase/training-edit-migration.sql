@@ -1,5 +1,6 @@
 -- BCSO Training Operations Center: edit an existing scheduled training.
--- Run after schema.sql and public-cancellation-migration.sql.
+-- Run after schema.sql, public-cancellation-migration.sql, and
+-- training-command-overrides.sql (which defines is_training_command()).
 -- Training Command permission is checked server-side; ordinary users must
 -- supply the one-time cancellation code issued when the training was posted.
 
