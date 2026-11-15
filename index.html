@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101a2b">
   <title>BCSO | FTO Training Operations Center</title>
-  <link rel="stylesheet" href="/BCSO-Training-Schedule/styles.css?v=20261110-restore">
+  <link rel="stylesheet" href="/BCSO-Training-Schedule/styles.css?v=20261115-edit-trainings">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
     :root{--navy:#101a2b;--navy2:#17243a;--blue:#2f6fed;--ink:#172235;--muted:#758196;--line:#e6eaf0;--bg:#f4f6f9;--white:#fff;--green:#23956b;--red:#c54b4b}
@@ -49,6 +49,14 @@
     .request-id{font-size:9px;color:#9aa4b3;overflow-wrap:anywhere;margin-top:9px}
     @media(max-width:850px){.request-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:700px){.queue-controls{width:100%;justify-content:space-between}.queue-controls select{min-width:0;flex:1}.overlap-request-head{flex-direction:column}.request-detail-grid{grid-template-columns:1fr 1fr}.request-actions{justify-content:stretch}.request-actions .button{flex:1}}
+    
+    /* Existing scheduled training editor */
+    .edit-training-card{max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain}
+    .edit-training-help{font-size:11px;line-height:1.6;color:#778399;margin:8px 0 18px;max-width:440px}
+    .edit-code-field .field-hint{font-size:10px;color:#8793a5;font-weight:400;line-height:1.5}
+    #modalActions{justify-content:flex-end}
+    #modalActions .button{margin-left:0}
+    @media(max-width:700px){.edit-training-card{padding:22px 18px}.edit-training-card .form-grid{grid-template-columns:1fr}.edit-training-card .button-row{justify-content:stretch}.edit-training-card .button-row .button{flex:1}}
     
   </style>
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.css" rel="stylesheet">
@@ -153,6 +161,34 @@
 
   <div id="eventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-card"><button class="modal-close" id="closeModal" aria-label="Close">×</button><p class="eyebrow" id="modalDivision"></p><h2 id="modalTitle"></h2><p id="modalWhen" class="muted"></p><div id="modalDescription" class="modal-description"></div><div class="detail-grid" id="modalDetails"></div><div id="modalActions" class="button-row"></div></div>
+  </div>
+
+  <div id="editTrainingModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editTrainingTitle">
+    <div class="modal-card edit-training-card">
+      <button class="modal-close" id="closeEditTraining" aria-label="Close">×</button>
+      <p class="eyebrow">UPDATE SCHEDULED SESSION</p>
+      <h2 id="editTrainingTitle">Edit training</h2>
+      <p class="edit-training-help">Changes update the existing calendar entry. The training will keep its original record and approval history.</p>
+      <form id="editTrainingForm" class="training-form">
+        <label>Training title<input id="editTitle" maxlength="120" required></label>
+        <div class="form-grid">
+          <label>Division<select id="editDivision" required></select></label>
+          <label>Instructor<input id="editInstructor" maxlength="100" required></label>
+        </div>
+        <label>Description<textarea id="editDescription" rows="4" maxlength="2000"></textarea></label>
+        <div class="form-grid">
+          <label>Start date and time<input id="editStartsAt" type="datetime-local" required></label>
+          <label>End date and time<input id="editEndsAt" type="datetime-local" required></label>
+        </div>
+        <div class="form-grid">
+          <label>Location<input id="editLocation" maxlength="150"></label>
+          <label>Maximum participants<input id="editCapacity" type="number" min="1" max="500" placeholder="No limit"></label>
+        </div>
+        <label id="editCodeField" class="edit-code-field">Original cancellation code<input id="editCancellationCode" type="password" autocomplete="off" placeholder="Enter the code provided when this training was posted"><span class="field-hint">This verifies that you are authorized to change this training.</span></label>
+        <p id="editTrainingMessage" class="form-message" role="status"></p>
+        <div class="button-row"><button type="button" class="button secondary" id="cancelEditTraining">Back</button><button type="submit" class="button primary" id="saveTrainingChanges">Save changes</button></div>
+      </form>
+    </div>
   </div>
 
   <div id="commandAuthModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="commandAuthTitle">
