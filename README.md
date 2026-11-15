@@ -103,3 +103,12 @@ For a brand-new database, Dispatch is also included in the starter division list
 Run `supabase/add-k9-division.sql` in the Supabase SQL Editor. It safely creates the K9 division or reactivates it if it already exists. The primary and public schedule pages load active divisions directly from Supabase, so K9 will automatically appear in the training dropdown and division filters after the database change.
 
 For a brand-new database, K9 is also included in the starter division list in `supabase/schema.sql`.
+
+
+## Edit an existing scheduled training
+
+The primary Training Operations Center includes an **Edit this training** action in the details window for scheduled sessions. The existing event record is updated in place, so its ID and calendar entry remain the same. Ordinary users must enter the one-time cancellation code issued when the session was posted. Signed-in Training Command members can edit without that code.
+
+To enable editing on an existing Supabase database, run `supabase/training-edit-migration.sql` in the Supabase SQL Editor **after** `supabase/public-cancellation-migration.sql` and `supabase/training-command-overrides.sql`. The database validates the authorization code, keeps completed/cancelled sessions read-only, validates all edited fields, and applies the existing overlap trigger when the date or time changes. A previously approved overlap keeps its existing approved time for ordinary code-based detail edits; changing that time requires Training Command access.
+
+The public-facing read-only schedule remains read-only. Edits are made from the primary Training Operations Center.
