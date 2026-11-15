@@ -1,7 +1,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const config = window.BCSO_CONFIG || {};
-  let db, divisions = [], trainings = [], overlapRequests = [], calendar, activeFilter = "", isTrainingCommand = false;
+  let db, divisions = [], trainings = [], overlapRequests = [], calendar, activeFilter = "", isTrainingCommand = false, editingTrainingId = null;
   const colors = ["#477ce6","#23956b","#8a63c7","#d28b35","#c65d75","#268eaa","#75839a"];
   const colorFor = (id) => colors[Math.max(0, divisions.findIndex(d => d.id === id)) % colors.length];
   const esc = (s="") => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -28,6 +28,10 @@
     $("historyDivision").addEventListener("change", renderHistory);
     $("closeModal").addEventListener("click", closeModal);
     $("eventModal").addEventListener("click", e => { if(e.target === $("eventModal")) closeModal(); });
+    $("editTrainingForm").addEventListener("submit", saveTrainingChanges);
+    $("closeEditTraining").addEventListener("click", closeEditTraining);
+    $("cancelEditTraining").addEventListener("click", closeEditTraining);
+    $("editTrainingModal").addEventListener("click", e => { if(e.target === $("editTrainingModal")) closeEditTraining(); });
     document.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click",()=>navigate(b.dataset.page)));
     document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.goto)));
     await checkCommandSession();
@@ -47,6 +51,7 @@
   function populateDivisionSelects(){
     const opts=divisions.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join("");
     $("division").innerHTML=opts || '<option value="">No divisions available</option>';
+    $("editDivision").innerHTML=opts || '<option value="">No divisions available</option>';
     $("historyDivision").innerHTML='<option value="">All divisions</option>'+opts;
   }
   function navigate(page){
@@ -228,13 +233,89 @@
     if(t.conflict_override) detailRows.push(["Scheduling exception","Approved by Training Command"]);
     $("modalDetails").innerHTML=detailRows.map(([k,v])=>`<div class="detail-cell"><span>${k}</span><strong>${esc(v)}</strong></div>`).join("");
     $("modalActions").innerHTML = t.status === "scheduled"
-      ? '<button class="button danger" id="cancelScheduledTraining">Cancel this training</button>'
+      ? '<button class="button secondary" id="editScheduledTraining">Edit this training</button><button class="button danger" id="cancelScheduledTraining">Cancel this training</button>'
       : '';
+    const editButton = $("editScheduledTraining");
+    if(editButton) editButton.addEventListener("click", () => openEditTraining(t));
     const cancelButton = $("cancelScheduledTraining");
     if (cancelButton) cancelButton.addEventListener("click", () => cancelScheduledTraining(t));
     $("eventModal").classList.remove("hidden");
   }
   function closeModal(){$("eventModal").classList.add("hidden")}
+  function toLocalDateTimeInput(value){
+    const date=new Date(value);
+    if(Number.isNaN(date.getTime()))return "";
+    return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  }
+  function openEditTraining(training){
+    editingTrainingId=training.id;
+    $("editTitle").value=training.title||"";
+    $("editDivision").value=training.division_id||"";
+    $("editInstructor").value=training.instructor||"";
+    $("editDescription").value=training.description||"";
+    $("editStartsAt").value=toLocalDateTimeInput(training.starts_at);
+    $("editEndsAt").value=toLocalDateTimeInput(training.ends_at);
+    $("editLocation").value=training.location||"";
+    $("editCapacity").value=training.capacity??"";
+    $("editCancellationCode").value="";
+    $("editCodeField").classList.toggle("hidden",isTrainingCommand);
+    $("editCancellationCode").required=!isTrainingCommand;
+    msg("editTrainingMessage",isTrainingCommand
+      ?"Training Command authorization is active. You do not need the original cancellation code."
+      :"Enter the original cancellation code to authorize this edit.");
+    closeModal();
+    $("editTrainingModal").classList.remove("hidden");
+  }
+  function closeEditTraining(){
+    $("editTrainingModal").classList.add("hidden");
+    $("editTrainingForm").reset();
+    $("editCancellationCode").required=true;
+    editingTrainingId=null;
+  }
+  async function saveTrainingChanges(e){
+    e.preventDefault();
+    if(!editingTrainingId)return;
+    const starts=new Date($("editStartsAt").value);
+    const ends=new Date($("editEndsAt").value);
+    if(Number.isNaN(starts.getTime())||Number.isNaN(ends.getTime())||starts>=ends){
+      msg("editTrainingMessage","Enter a valid start and end time. The end must be later than the start.");
+      return;
+    }
+    const capacityValue=$("editCapacity").value.trim();
+    const capacity=capacityValue===""?null:Number(capacityValue);
+    if(capacity!==null&&(!Number.isInteger(capacity)||capacity<1||capacity>500)){
+      msg("editTrainingMessage","Maximum participants must be between 1 and 500.");
+      return;
+    }
+    const code=$("editCancellationCode").value.trim();
+    if(!isTrainingCommand&&!code){
+      msg("editTrainingMessage","The original cancellation code is required.");
+      return;
+    }
+    const button=$("saveTrainingChanges");
+    button.disabled=true;button.textContent="Saving...";
+    msg("editTrainingMessage","Updating the existing training...");
+    const {error}=await db.rpc("edit_training_with_code",{
+      target_training_id:editingTrainingId,
+      supplied_code:isTrainingCommand?null:code,
+      training_title:$("editTitle").value.trim(),
+      target_division_id:$("editDivision").value,
+      training_instructor:$("editInstructor").value.trim(),
+      training_description:$("editDescription").value,
+      training_starts_at:starts.toISOString(),
+      training_ends_at:ends.toISOString(),
+      training_location:$("editLocation").value.trim()||null,
+      training_capacity:capacity
+    });
+    button.disabled=false;button.textContent="Save changes";
+    if(error){
+      msg("editTrainingMessage",error.message||"Unable to update this training.");
+      return;
+    }
+    closeEditTraining();
+    alert("Training updated successfully. The existing calendar entry has been changed.");
+    await refreshData();
+  }
   async function cancelScheduledTraining(training){
     const code = prompt("Enter the cancellation code that was provided when this training was scheduled:");
     if (code === null) return;
